@@ -27,8 +27,8 @@ However, **all the security fixes are 100 % correct and production-ready** — t
 | No security event logging    | `server.ts`         | Added Winston logger → writes to `security.log`                                |
 
 ### Deliverables
-- Full detailed report → (i have submitted it but also in github repository)
-- 4-minute video walkthrough → (i have submitted it)  
+- Full detailed report → final_report.txt
+- 12-minute video walkthrough → https://drive.google.com/file/d/1DsiqQQrjw3Jckuo4T8UydAtmF5LJrbK-/view?usp=drivesdk
 - All corrected source files included in this repo for review
 
 ### Verification (shown in video)

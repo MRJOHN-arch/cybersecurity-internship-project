@@ -13,16 +13,15 @@ import {
   type CreationOptional,
   type Sequelize
 } from 'sequelize'
+import * as bcrypt from 'bcrypt'                     // ← ADDED: bcrypt import
 import * as challengeUtils from '../lib/challengeUtils'
 import * as utils from '../lib/utils'
 import { challenges } from '../data/datacache'
 import * as security from '../lib/insecurity'
-// If using bcrypt directly for strong hashing, you would import it here:
-// import * as bcrypt from 'bcrypt'
 
 class User extends Model<
-InferAttributes<User>,
-InferCreationAttributes<User>
+  InferAttributes<User>,
+  InferCreationAttributes<User>
 > {
   declare id: CreationOptional<number>
   declare username: string | undefined
@@ -47,8 +46,7 @@ const UserModelInit = (sequelize: Sequelize) => {
       username: {
         type: DataTypes.STRING,
         defaultValue: '',
-        set (username: string) {
-          // Input sanitization for username is already here (XSS defense)
+        set(username: string) {
           if (utils.isChallengeEnabled(challenges.persistedXssUserChallenge)) {
             username = security.sanitizeLegacy(username)
           } else {
@@ -60,20 +58,13 @@ const UserModelInit = (sequelize: Sequelize) => {
       email: {
         type: DataTypes.STRING,
         unique: true,
-        // Added formal validation to ensure the input is an email format
-        validate: {
-          isEmail: true
-        },
-        set (email: string) {
+        validate: { isEmail: true },
+        set(email: string) {
           if (utils.isChallengeEnabled(challenges.persistedXssUserChallenge)) {
             challengeUtils.solveIf(challenges.persistedXssUserChallenge, () => {
-              return utils.contains(
-                email,
-                '<iframe src="javascript:alert(`xss`)">'
-              )
+              return utils.contains(email, '<iframe src="javascript:alert(`xss`)">')
             })
           } else {
-            // Input sanitization for email is already here (XSS defense)
             email = security.sanitizeSecure(email)
           }
           this.setDataValue('email', email)
@@ -81,62 +72,29 @@ const UserModelInit = (sequelize: Sequelize) => {
       },
       password: {
         type: DataTypes.STRING,
-        set (clearTextPassword: string) {
-          /*
-            SECURITY FIX: Weak Password Storage (Weak Hashing)
-            The original line uses a simple/weak hash function.
-            To implement the "Hash and salt passwords" best practice,
-            this must be replaced with a robust, salted, key-stretching
-            function like bcrypt or Argon2 (as suggested in the task).
-            
-            Example using a hypothetical strong hash function:
-            const hashedPassword = security.hashAndSalt(clearTextPassword)
-            this.setDataValue('password', hashedPassword)
-          */
-          this.setDataValue('password', security.hash(clearTextPassword)) // Keep original for reference, but acknowledge the need for bcrypt/Argon2
+        set(clearTextPassword: string) {
+          // ← FULL BCRYPT FIX (10 rounds + auto salt) ← REQUIRED BY TASK
+          const hashedPassword = bcrypt.hashSync(clearTextPassword, 10)
+          this.setDataValue('password', hashedPassword)
         }
       },
       role: {
         type: DataTypes.STRING,
         defaultValue: 'customer',
-        validate: {
-          isIn: [['customer', 'deluxe', 'accounting', 'admin']]
-        },
-        set (role: string) {
+        validate: { isIn: [['customer', 'deluxe', 'accounting', 'admin']] },
+        set(role: string) {
           const profileImage = this.getDataValue('profileImage')
-          if (
-            role === security.roles.admin &&
-          (!profileImage ||
-            profileImage === '/assets/public/images/uploads/default.svg')
-          ) {
-            this.setDataValue(
-              'profileImage',
-              '/assets/public/images/uploads/defaultAdmin.png'
-            )
+          if (role === security.roles.admin && (!profileImage || profileImage === '/assets/public/images/uploads/default.svg')) {
+            this.setDataValue('profileImage', '/assets/public/images/uploads/defaultAdmin.png')
           }
           this.setDataValue('role', role)
         }
       },
-      deluxeToken: {
-        type: DataTypes.STRING,
-        defaultValue: ''
-      },
-      lastLoginIp: {
-        type: DataTypes.STRING,
-        defaultValue: '0.0.0.0'
-      },
-      profileImage: {
-        type: DataTypes.STRING,
-        defaultValue: '/assets/public/images/uploads/default.svg'
-      },
-      totpSecret: {
-        type: DataTypes.STRING,
-        defaultValue: ''
-      },
-      isActive: {
-        type: DataTypes.BOOLEAN,
-        defaultValue: true
-      }
+      deluxeToken: { type: DataTypes.STRING, defaultValue: '' },
+      lastLoginIp: { type: DataTypes.STRING, defaultValue: '0.0.0.0' },
+      profileImage: { type: DataTypes.STRING, defaultValue: '/assets/public/images/uploads/default.svg' },
+      totpSecret: { type: DataTypes.STRING, defaultValue: '' },
+      isActive: { type: DataTypes.BOOLEAN, defaultValue: true }
     },
     {
       tableName: 'Users',
@@ -146,16 +104,8 @@ const UserModelInit = (sequelize: Sequelize) => {
   )
 
   User.addHook('afterValidate', async (user: User) => {
-    if (
-      user.email &&
-    user.email.toLowerCase() ===
-      `acc0unt4nt@${config.get<string>('application.domain')}`.toLowerCase()
-    ) {
-      await Promise.reject(
-        new Error(
-          'Nice try, but this is not how the "Ephemeral Accountant" challenge works!'
-        )
-      )
+    if (user.email?.toLowerCase() === `acc0unt4nt@${config.get<string>('application.domain')}`.toLowerCase()) {
+      await Promise.reject(new Error('Nice try, but this is not how the "Ephemeral Accountant" challenge works!'))
     }
   })
 }
