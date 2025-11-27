@@ -4,6 +4,8 @@
  */
 import { type Request, type Response, type NextFunction } from 'express'
 import config from 'config'
+import * as validator from 'validator' 
+import * as jwt from 'jsonwebtoken' // <-- NEW: Import jsonwebtoken
 
 import * as challengeUtils from '../lib/challengeUtils'
 import { challenges, users } from '../data/datacache'
@@ -14,15 +16,24 @@ import * as models from '../models/index'
 import { type User } from '../data/types'
 import * as utils from '../lib/utils'
 
+// NOTE: We are replacing the security.authorize() call with a custom JWT sign
+// to fulfill the 'jsonwebtoken' task requirement (Week 2, Task 2).
+const JWT_SECRET = 'your-internship-secret-key-123456789' // Define a strong secret key
+
 // vuln-code-snippet start loginAdminChallenge loginBenderChallenge loginJimChallenge
 export function login () {
   function afterLogin (user: { data: User, bid: number }, res: Response, next: NextFunction) {
     verifyPostLoginChallenges(user) // vuln-code-snippet hide-line
     BasketModel.findOrCreate({ where: { UserId: user.data.id } })
       .then(([basket]: [BasketModel, boolean]) => {
-        const token = security.authorize(user)
+        // --- JWT Implementation (Week 2, Task 2) ---
+        // Instead of the vulnerable or custom security.authorize, we generate a standard JWT.
+        // We include only the necessary user ID in the token payload.
+        const token = jwt.sign({ id: user.data.id }, JWT_SECRET, { expiresIn: '1h' }) 
+        // -------------------------------------------
+
         user.bid = basket.id // keep track of original basket
-        security.authenticatedUsers.put(token, user)
+        security.authenticatedUsers.put(token, user) // Store the token
         res.json({ authentication: { token, bid: basket.id, umail: user.data.email } })
       }).catch((error: Error) => {
         next(error)
@@ -31,8 +42,28 @@ export function login () {
 
   return (req: Request, res: Response, next: NextFunction) => {
     verifyPreLoginChallenges(req) // vuln-code-snippet hide-line
-    models.sequelize.query(`SELECT * FROM Users WHERE email = '${req.body.email || ''}' AND password = '${security.hash(req.body.password || '')}' AND deletedAt IS NULL`, { model: UserModel, plain: true }) // vuln-code-snippet vuln-line loginAdminChallenge loginBenderChallenge loginJimChallenge
-      .then((authenticatedUser) => { // vuln-code-snippet neutral-line loginAdminChallenge loginBenderChallenge loginJimChallenge
+
+    const email = req.body.email || ''
+    const password = req.body.password || ''
+
+    // 1. INPUT VALIDATION (Fixing SQLi and mitigating XSS)
+    if (!validator.isEmail(email)) {
+      // In a real app, we would also validate the password, but here we focus on the email format.
+      return res.status(401).send(res.__('Invalid email or password.'))
+    }
+
+    // 2. SECURE DATABASE QUERY (Fixing the SQL Injection)
+    // Using findOne with Sequelize's ORM is safer than raw SQL query concatenation.
+    // NOTE: This assumes the password stored in the database is currently plain-text or a simple hash.
+    // The *real* fix is hashing at registration (bcrypt), but this prevents SQLi on login.
+    UserModel.findOne({
+      where: {
+        email: email,
+        password: security.hash(password),
+        deletedAt: null
+      }
+    })
+      .then((authenticatedUser) => {
         const user = utils.queryResultToJson(authenticatedUser)
         if (user.data?.id && user.data.totpSecret !== '') {
           res.status(401).json({

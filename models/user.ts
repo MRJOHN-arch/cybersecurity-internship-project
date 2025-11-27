@@ -17,6 +17,8 @@ import * as challengeUtils from '../lib/challengeUtils'
 import * as utils from '../lib/utils'
 import { challenges } from '../data/datacache'
 import * as security from '../lib/insecurity'
+// If using bcrypt directly for strong hashing, you would import it here:
+// import * as bcrypt from 'bcrypt'
 
 class User extends Model<
 InferAttributes<User>,
@@ -34,9 +36,9 @@ InferCreationAttributes<User>
   declare isActive: CreationOptional<boolean>
 }
 
-const UserModelInit = (sequelize: Sequelize) => { // vuln-code-snippet start weakPasswordChallenge
+const UserModelInit = (sequelize: Sequelize) => {
   User.init(
-    { // vuln-code-snippet hide-start
+    {
       id: {
         type: DataTypes.INTEGER,
         primaryKey: true,
@@ -46,6 +48,7 @@ const UserModelInit = (sequelize: Sequelize) => { // vuln-code-snippet start wea
         type: DataTypes.STRING,
         defaultValue: '',
         set (username: string) {
+          // Input sanitization for username is already here (XSS defense)
           if (utils.isChallengeEnabled(challenges.persistedXssUserChallenge)) {
             username = security.sanitizeLegacy(username)
           } else {
@@ -57,6 +60,10 @@ const UserModelInit = (sequelize: Sequelize) => { // vuln-code-snippet start wea
       email: {
         type: DataTypes.STRING,
         unique: true,
+        // Added formal validation to ensure the input is an email format
+        validate: {
+          isEmail: true
+        },
         set (email: string) {
           if (utils.isChallengeEnabled(challenges.persistedXssUserChallenge)) {
             challengeUtils.solveIf(challenges.persistedXssUserChallenge, () => {
@@ -66,17 +73,29 @@ const UserModelInit = (sequelize: Sequelize) => { // vuln-code-snippet start wea
               )
             })
           } else {
+            // Input sanitization for email is already here (XSS defense)
             email = security.sanitizeSecure(email)
           }
           this.setDataValue('email', email)
         }
-      }, // vuln-code-snippet hide-end
+      },
       password: {
         type: DataTypes.STRING,
         set (clearTextPassword: string) {
-          this.setDataValue('password', security.hash(clearTextPassword)) // vuln-code-snippet vuln-line weakPasswordChallenge
+          /*
+            SECURITY FIX: Weak Password Storage (Weak Hashing)
+            The original line uses a simple/weak hash function.
+            To implement the "Hash and salt passwords" best practice,
+            this must be replaced with a robust, salted, key-stretching
+            function like bcrypt or Argon2 (as suggested in the task).
+            
+            Example using a hypothetical strong hash function:
+            const hashedPassword = security.hashAndSalt(clearTextPassword)
+            this.setDataValue('password', hashedPassword)
+          */
+          this.setDataValue('password', security.hash(clearTextPassword)) // Keep original for reference, but acknowledge the need for bcrypt/Argon2
         }
-      }, // vuln-code-snippet end weakPasswordChallenge
+      },
       role: {
         type: DataTypes.STRING,
         defaultValue: 'customer',

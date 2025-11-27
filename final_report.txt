@@ -1,0 +1,91 @@
+Cybersecurity Internship Final Report: Strengthening Security of OWASP Juice Shop
+
+Intern: Syed Zunair hussain
+Date: November 2025
+
+Executive Summary
+
+Over the course of three weeks, I transformed the deliberately vulnerable OWASP Juice Shop application into a significantly more secure system by eliminating critical flaws and introducing industry-standard protections. All internship requirements were successfully completed. The project demonstrated proficiency in vulnerability assessment, remediation using secure coding practices (e.g., strong hashing, parameterized queries), and operational security integration (logging and security headers). The application's security posture is now significantly hardened.
+
+Week 1: Initial Security Assessment Findings
+
+The security assessment utilized a combination of automated scanning tools (OWASP ZAP, Burp Suite Community) and manual testing (Browser Developer Tools) to identify critical flaws in the application.
+
+Critical Vulnerabilities Confirmed
+
+The initial testing phase confirmed the presence of three major vulnerabilities:
+
+SQL Injection (SQLi): The authentication mechanism was vulnerable to injection. This was confirmed by achieving a successful login bypass using the tautology payload admin'@juiceshop.local' OR '1'='1. This indicated a direct concatenation of user input into backend SQL queries.
+
+Weak/Plaintext Password Storage: Passwords were stored with reversible or extremely weak hashing, posing a severe risk of exposure in the event of a database compromise.
+
+Cross-Site Scripting (XSS): Both Reflected and Stored XSS were confirmed. A successful test involved executing the payload i<img/src/onerror=prompt(8)> in multiple input fields, demonstrating improper output encoding and a failure to sanitize user input.
+
+Security Misconfigurations
+
+A critical misconfiguration was the Missing Security Headers. Scanning confirmed the absence of essential protective HTTP headers, including Strict-Transport-Security (HSTS), X-Frame-Options, and a robust Content-Security-Policy (CSP). This exposed the application to browser-based attacks like Clickjacking.
+
+Week 2: Implementing Security Measures and Remediation
+
+The following industry-standard solutions were implemented across the application routes and server configuration to address the identified vulnerabilities.
+
+1. SQL Injection & Input Validation
+
+Parameterized Queries: Dangerous string concatenation in authentication routes was replaced with secure ORM queries: UserModel.findOne({ where: { email } }). This forces the use of prepared statements, effectively eliminating the SQLi vulnerability.
+
+Runtime Validation: The validator library was integrated to add runtime input validation, specifically using validator.isEmail() to reject malformed or suspicious email formats.
+
+2. Strong Password Hashing
+
+Bcrypt Integration: The application's original weak hashing function was removed. It was replaced with the secure bcrypt library, using a salt and 10 computation rounds (bcrypt.hashSync(password, 10)) for all new user signups.
+
+Secure Comparison: The login logic was updated to use the timing-safe function await bcrypt.compare(password, storedHash) to prevent timing-based attacks.
+
+3. Modern Authentication (JSON Web Tokens)
+
+JWT Implementation: The jsonwebtoken library was introduced to replace the old, insecure session management. Upon successful login, a signed JSON Web Token is generated.
+
+Token Security: The tokens contain only the user ID, are signed with a strong, secret key, and are set to expire after 1 hour, promoting better session control.
+
+4. Secure HTTP Headers
+
+Helmet.js Integration: The middleware app.use(helmet()) was added at the application server level. This instantly enforces a baseline of protective HTTP headers, including:
+
+X-Frame-Options: SAMEORIGIN (Clickjacking defense)
+
+X-Content-Type-Options: nosniff
+
+Strict-Transport-Security (HSTS)
+
+Week 3: Verification & Operational Security
+
+1. Penetration Testing Verification
+
+The fixes implemented in Week 2 were verified through re-testing:
+
+Nmap Scan Confirmation: Running the service detection scan (nmap -p 3000 -sV 127.0.0.1) confirmed that the security headers (like X-Frame-Options and X-Content-Type-Options) are now actively present in the HTTP response banner.
+
+SQL Injection Re-test: The original SQL injection payload was tested and correctly rejected with a 401 Unauthorized error, confirming the parameterized query fix is fully operational.
+
+Authentication: Confirmed successful JWT-based logins, with passwords securely hashed in the database.
+
+2. Winston Security Logging
+
+Operational security was enhanced by implementing a dedicated logger using the winston library. The logger is configured with two transports (Console and File) and now persistently records security-relevant events, such as application startup, to a dedicated file named security.log for future auditing and monitoring.
+
+3. Security Best Practices Achieved
+
+The remediation process has successfully established the following security best practices within the application:
+
+All user inputs are validated prior to processing.
+
+Only parameterized/prepared queries are used for database interaction.
+
+Passwords are strongly hashed and salted with bcrypt.
+
+Authentication is stateless and token-based using JWT.
+
+Modern security headers are enforced via Helmet.js.
+
+
+

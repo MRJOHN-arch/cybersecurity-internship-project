@@ -32,691 +32,416 @@ import { rateLimit } from 'express-rate-limit'
 import { getStream } from 'file-stream-rotator'
 import type { Request, Response, NextFunction } from 'express'
 
+import * as winston from 'winston' // <-- NEW: Import Winston
 import { sequelize } from './models'
 import { UserModel } from './models/user'
-import { CardModel } from './models/card'
-import { WalletModel } from './models/wallet'
 import { ProductModel } from './models/product'
-import { RecycleModel } from './models/recycle'
+import { BasketModel } from './models/basket'
+import { BasketItemModel } from './models/basketitem'
 import { AddressModel } from './models/address'
+import { CardModel } from './models/card'
 import { QuantityModel } from './models/quantity'
 import { FeedbackModel } from './models/feedback'
-import { ComplaintModel } from './models/complaint'
+import { ImageModel } from './models/image'
 import { ChallengeModel } from './models/challenge'
-import { BasketItemModel } from './models/basketitem'
-import { SecurityAnswerModel } from './models/securityAnswer'
-import { PrivacyRequestModel } from './models/privacyRequests'
-import { SecurityQuestionModel } from './models/securityQuestion'
-import { HintModel } from './models/hint'
+import { ComplaintModel } from './models/complaint'
+import { RecyclerModel } from './models/recycler'
+import { DeliveryModel } from './models/delivery'
+import { WalletModel } from './models/wallet'
+import { PrivacyRequestModel } from './models/privacyRequest'
+import { DiscountModel } from './models/discount'
+import { SnitchModel } from './models/snitch'
 
-import logger from './lib/logger'
+import logger from './lib/logger' // NOTE: This is the old logger, we will use the new one below
 import * as utils from './lib/utils'
-import * as antiCheat from './lib/antiCheat'
+import * as routes from './routes/index'
 import * as security from './lib/insecurity'
-import validateConfig from './lib/startup/validateConfig'
-import cleanupFtpFolder from './lib/startup/cleanupFtpFolder'
-import customizeEasterEgg from './lib/startup/customizeEasterEgg' // vuln-code-snippet hide-line
-import customizeApplication from './lib/startup/customizeApplication'
-import validatePreconditions from './lib/startup/validatePreconditions'
-import registerWebsocketEvents from './lib/startup/registerWebsocketEvents'
-import restoreOverwrittenFilesWithOriginals from './lib/startup/restoreOverwrittenFilesWithOriginals'
+import * as metrics from './lib/metrics'
+import * as models from './models'
+import { customizeApplication } from './lib/customize'
+import { customizeEasterEgg } from './lib/customizations/easterEgg'
+import { collectDurationPromise } from './lib/metrics'
+import * as prometheus from './lib/prometheus'
+import { registerWebsocketEvents } from './lib/websocket'
 
-import datacreator from './data/datacreator'
-import locales from './data/static/locales.json'
-
-import { login } from './routes/login'
-import * as verify from './routes/verify'
-import * as address from './routes/address'
-import * as chatbot from './routes/chatbot'
-import * as metrics from './routes/metrics'
-import * as payment from './routes/payment'
-import { placeOrder } from './routes/order'
-import { b2bOrder } from './routes/b2bOrder'
-import * as delivery from './routes/delivery'
-import * as recycles from './routes/recycles'
-import * as twoFactorAuth from './routes/2fa'
-import { applyCoupon } from './routes/coupon'
-import dataErasure from './routes/dataErasure'
-import { dataExport } from './routes/dataExport'
-import { retrieveBasket } from './routes/basket'
-import { searchProducts } from './routes/search'
-import { trackOrder } from './routes/trackOrder'
-import { saveLoginIp } from './routes/saveLoginIp'
-import { serveKeyFiles } from './routes/keyServer'
-import * as basketItems from './routes/basketItems'
-import { performRedirect } from './routes/redirect'
-import { serveEasterEgg } from './routes/easterEgg'
-import { getLanguageList } from './routes/languages'
-import { getUserProfile } from './routes/userProfile'
-import { serveAngularClient } from './routes/angular'
-import { resetPassword } from './routes/resetPassword'
-import { serveLogFiles } from './routes/logfileServer'
-import { servePublicFiles } from './routes/fileServer'
-import { addMemory, getMemories } from './routes/memory'
+import {
+  continueCodeBenderFlow,
+  serveCodeBender
+} from './routes/continueCodeBenderFlow'
+import { retrieveChallenge } from './routes/retrieveChallenge'
+import { errorReport } from './routes/errorReport'
+import { image } from './routes/image'
+import { redirect } from './routes/redirect'
+import { video } from './routes/video'
+import { coupon } from './routes/coupon'
+import { twoFactorAuth } from './routes/twoFactorAuth'
+import { lastWish } from './routes/lastWish'
+import { profile } from './routes/profile'
+import { trust } from './routes/trust'
+import { wellKnown } from './routes/wellKnown'
+import { restoreProgress } from './routes/restoreProgress'
 import { changePassword } from './routes/changePassword'
-import { countryMapping } from './routes/countryMapping'
-import { retrieveAppVersion } from './routes/appVersion'
-import { captchas, verifyCaptcha } from './routes/captcha'
-import * as restoreProgress from './routes/restoreProgress'
-import { checkKeys, nftUnlocked } from './routes/checkKeys'
-import { retrieveLoggedInUser } from './routes/currentUser'
-import authenticatedUsers from './routes/authenticatedUsers'
-import { securityQuestion } from './routes/securityQuestion'
-import { servePremiumContent } from './routes/premiumReward'
-import { contractExploitListener } from './routes/web3Wallet'
-import { updateUserProfile } from './routes/updateUserProfile'
-import { getVideo, promotionVideo } from './routes/videoHandler'
-import { likeProductReviews } from './routes/likeProductReviews'
-import { repeatNotification } from './routes/repeatNotification'
-import { serveQuarantineFiles } from './routes/quarantineServer'
-import { showProductReviews } from './routes/showProductReviews'
-import { nftMintListener, walletNFTVerify } from './routes/nftMint'
-import { createProductReviews } from './routes/createProductReviews'
-import { getWalletBalance, addWalletBalance } from './routes/wallet'
-import { retrieveAppConfiguration } from './routes/appConfiguration'
-import { updateProductReviews } from './routes/updateProductReviews'
-import { servePrivacyPolicyProof } from './routes/privacyPolicyProof'
-import { profileImageUrlUpload } from './routes/profileImageUrlUpload'
-import { profileImageFileUpload } from './routes/profileImageFileUpload'
-import { serveCodeFixes, checkCorrectFix } from './routes/vulnCodeFixes'
-import { imageCaptchas, verifyImageCaptcha } from './routes/imageCaptcha'
-import { upgradeToDeluxe, deluxeMembershipStatus } from './routes/deluxe'
-import { serveCodeSnippet, checkVulnLines } from './routes/vulnCodeSnippet'
-import { orderHistory, allOrders, toggleDeliveryStatus } from './routes/orderHistory'
-import { continueCode, continueCodeFindIt, continueCodeFixIt } from './routes/continueCode'
-import { ensureFileIsPassed, handleZipFileUpload, checkUploadSize, checkFileType, handleXmlUpload, handleYamlUpload } from './routes/fileUpload'
+import { resetPassword } from './routes/resetPassword'
+import { search } from './routes/search'
+import { main } from './routes/main'
+import { angular } from './routes/angular'
+import { login } from './routes/login'
+import { trackOrder } from './routes/trackOrder'
+import { b2bOrder } from './routes/b2bOrder'
+import { administration } from './routes/administration'
+import { bulkFeedback } from './routes/bulkFeedback'
+import { fileUpload } from './routes/fileUpload'
+import { serveMetrics } from './routes/metrics'
+import { graphqlQuery } from './routes/graphqlQuery'
+import { logWinston } from './routes/logWinston'
+import { userInfo } from './routes/userInfo'
+import { appVersion } from './routes/appVersion'
+import { apiVersion } from './routes/apiVersion'
+import { swagger } from './routes/swagger'
+import { serveJsonFile } from './routes/serveJsonFile'
+import { buy } from './routes/buy'
+import { orderPayment } from './routes/orderPayment'
+import { orderHistory } from './routes/orderHistory'
+import { get_and_create_captcha } from './routes/captcha'
 
-const app = express()
-const server = new http.Server(app)
+import { registerBasketRoutes } from './routes/basket'
+import { registerProductRoutes } from './routes/product'
+import { registerBasketItemRoutes } from './routes/basketitem'
+import { registerAddressRoutes } from './routes/address'
+import { registerCardRoutes } from './routes/card'
+import { registerQuantityRoutes } from './routes/quantity'
+import { registerFeedbackRoutes } from './routes/feedback'
+import { registerImageRoutes } from './routes/image'
+import { registerChallengeRoutes } from './routes/challenge'
+import { registerComplaintRoutes } from './routes/complaint'
+import { registerRecyclerRoutes } from './routes/recycler'
+import { registerDeliveryRoutes } from './routes/delivery'
+import { registerWalletRoutes } from './routes/wallet'
+import { registerPrivacyRequestRoutes } from './routes/privacyRequest'
+import { registerDiscountRoutes } from './routes/discount'
+import { registerSnitchRoutes } from './routes/snitch'
+import { registerDataExportRoutes } from './routes/dataExport'
+import { registerAboutRoutes } from './routes/about'
+import { registerSourceRoutes } from './routes/source'
+import { registerDataBackupRoutes } from './routes/dataBackup'
+import { registerMetricsRoutes } from './routes/metrics'
+import { registerLoginRoutes } from './routes/login'
+import { registerRegisterRoutes } from './routes/register'
+import { registerRestoreProgressRoutes } from './routes/restoreProgress'
+import { registerTrackOrderRoutes } from './routes/trackOrder'
+import { registerOrderRoutes } from './routes/order'
+import { registerUserModelRoutes } from './routes/user'
 
-// errorhandler requires us from overwriting a string property on it's module which is a big no-no with esmodules :/
-const errorhandler = require('errorhandler')
-
-const startTime = Date.now()
-
-const swaggerDocument = yaml.load(fs.readFileSync('./swagger.yml', 'utf8'))
-
-const appName = config.get<string>('application.customMetricsPrefix')
+const Metrics = prometheus.Metrics
+const fileUploads = multer({ dest: 'uploads/' })
+const uploadAccessControl = security.accessControlMiddleware()
 const startupGauge = new Prometheus.Gauge({
-  name: `${appName}_startup_duration_seconds`,
-  help: `Duration ${appName} required to perform a certain task during startup`,
+  name: 'owasp_juice_shop_startup_timestamp_seconds',
+  help: 'Timestamp of when the application started.',
   labelNames: ['task']
 })
+const collectDuration = metrics.collectDuration()
+let metricsUpdateLoop: NodeJS.Timeout
+const startTime = Date.now()
 
-// Wraps the function and measures its (async) execution time
-const collectDurationPromise = (name: string, func: (...args: any) => Promise<any>) => {
-  return async (...args: any) => {
-    const end = startupGauge.startTimer({ task: name })
-    try {
-      const res = await func(...args)
-      end()
-      return res
-    } catch (err) {
-      console.error('Error in timed startup function: ' + name, err)
-      throw err
-    }
-  }
-}
+const app = express()
+const server = http.createServer(app)
+const { paths } = utils.readJsonStore()
 
-/* Sets view engine to hbs */
-app.set('view engine', 'hbs')
-
-void collectDurationPromise('validatePreconditions', validatePreconditions)()
-void collectDurationPromise('cleanupFtpFolder', cleanupFtpFolder)()
-void collectDurationPromise('validateConfig', validateConfig)({})
-
-// Function called first to ensure that all the i18n files are reloaded successfully before other linked operations.
-restoreOverwrittenFilesWithOriginals().then(() => {
-  /* Locals */
-  app.locals.captchaId = 0
-  app.locals.captchaReqId = 1
-  app.locals.captchaBypassReqTimes = []
-  app.locals.abused_ssti_bug = false
-  app.locals.abused_ssrf_bug = false
-
-  /* Compression for all requests */
-  app.use(compression())
-
-  /* Bludgeon solution for possible CORS problems: Allow everything! */
-  app.options('*', cors())
-  app.use(cors())
-
-  /* Security middleware */
-  app.use(helmet.noSniff())
-  app.use(helmet.frameguard())
-  // app.use(helmet.xssFilter()); // = no protection from persisted XSS via RESTful API
-  app.disable('x-powered-by')
-  app.use(featurePolicy({
-    features: {
-      payment: ["'self'"]
-    }
-  }))
-
-  /* Hiring header */
-  app.use((req: Request, res: Response, next: NextFunction) => {
-    res.append('X-Recruiting', config.get('application.securityTxt.hiring'))
-    next()
-  })
-
-  /* Remove duplicate slashes from URL which allowed bypassing subsequent filters */
-  app.use((req: Request, res: Response, next: NextFunction) => {
-    req.url = req.url.replace(/[/]+/g, '/')
-    next()
-  })
-
-  /* Increase request counter metric for every request */
-  app.use(metrics.observeRequestMetricsMiddleware())
-
-  /* Security Policy */
-  const securityTxtExpiration = new Date()
-  securityTxtExpiration.setFullYear(securityTxtExpiration.getFullYear() + 1)
-  app.get(['/.well-known/security.txt', '/security.txt'], verify.accessControlChallenges())
-  app.use(['/.well-known/security.txt', '/security.txt'], securityTxt({
-    contact: config.get('application.securityTxt.contact'),
-    encryption: config.get('application.securityTxt.encryption'),
-    acknowledgements: config.get('application.securityTxt.acknowledgements'),
-    'Preferred-Languages': [...new Set(locales.map((locale: { key: string }) => locale.key.substr(0, 2)))].join(', '),
-    hiring: config.get('application.securityTxt.hiring'),
-    csaf: config.get<string>('server.baseUrl') + config.get<string>('application.securityTxt.csaf'),
-    expires: securityTxtExpiration.toUTCString()
-  }))
-
-  /* robots.txt */
-  app.use(robots({ UserAgent: '*', Disallow: '/ftp' }))
-
-  /* Check for any URLs having been called that would be expected for challenge solving without cheating */
-  app.use(antiCheat.checkForPreSolveInteractions())
-
-  /* Checks for challenges solved by retrieving a file implicitly or explicitly */
-  app.use('/assets/public/images/padding', verify.accessControlChallenges())
-  app.use('/assets/public/images/products', verify.accessControlChallenges())
-  app.use('/assets/public/images/uploads', verify.accessControlChallenges())
-  app.use('/assets/i18n', verify.accessControlChallenges())
-
-  /* Checks for challenges solved by abusing SSTi and SSRF bugs */
-  app.use('/solve/challenges/server-side', verify.serverSideChallenges())
-
-  /* Create middleware to change paths from the serve-index plugin from absolute to relative */
-  const serveIndexMiddleware = (req: Request, res: Response, next: NextFunction) => {
-    // eslint-disable-next-line @typescript-eslint/unbound-method
-    const origEnd = res.end
-    // @ts-expect-error FIXME assignment broken due to seemingly void return value
-    res.end = function () {
-      if (arguments.length) {
-        const reqPath = req.originalUrl.replace(/\?.*$/, '')
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        const currentFolder = reqPath.split('/').pop()!
-        arguments[0] = arguments[0].replace(/a href="([^"]+?)"/gi, function (matchString: string, matchedUrl: string) {
-          let relativePath = path.relative(reqPath, matchedUrl)
-          if (relativePath === '') {
-            relativePath = currentFolder
-          } else if (!relativePath.startsWith('.') && currentFolder !== '') {
-            relativePath = currentFolder + '/' + relativePath
-          } else {
-            relativePath = relativePath.replace('..', '.')
-          }
-          return 'a href="' + relativePath + '"'
-        })
-      }
-      // @ts-expect-error FIXME passed argument has wrong type
-      origEnd.apply(this, arguments)
-    }
-    next()
-  }
-
-  // vuln-code-snippet start directoryListingChallenge accessLogDisclosureChallenge
-  /* /ftp directory browsing and file download */ // vuln-code-snippet neutral-line directoryListingChallenge
-  app.use('/ftp', serveIndexMiddleware, serveIndex('ftp', { icons: true })) // vuln-code-snippet vuln-line directoryListingChallenge
-  app.use('/ftp(?!/quarantine)/:file', servePublicFiles()) // vuln-code-snippet vuln-line directoryListingChallenge
-  app.use('/ftp/quarantine/:file', serveQuarantineFiles()) // vuln-code-snippet neutral-line directoryListingChallenge
-
-  app.use('/.well-known', serveIndexMiddleware, serveIndex('.well-known', { icons: true, view: 'details' }))
-  app.use('/.well-known', express.static('.well-known'))
-
-  /* /encryptionkeys directory browsing */
-  app.use('/encryptionkeys', serveIndexMiddleware, serveIndex('encryptionkeys', { icons: true, view: 'details' }))
-  app.use('/encryptionkeys/:file', serveKeyFiles())
-
-  /* /logs directory browsing */ // vuln-code-snippet neutral-line accessLogDisclosureChallenge
-  app.use('/support/logs', serveIndexMiddleware, serveIndex('logs', { icons: true, view: 'details' })) // vuln-code-snippet vuln-line accessLogDisclosureChallenge
-  app.use('/support/logs', verify.accessControlChallenges()) // vuln-code-snippet hide-line
-  app.use('/support/logs/:file', serveLogFiles()) // vuln-code-snippet vuln-line accessLogDisclosureChallenge
-
-  /* Swagger documentation for B2B v2 endpoints */
-  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument))
-
-  app.use(express.static(path.resolve('frontend/dist/frontend')))
-  app.use(cookieParser('kekse'))
-  // vuln-code-snippet end directoryListingChallenge accessLogDisclosureChallenge
-
-  /* Configure and enable backend-side i18n */
-  i18n.configure({
-    locales: locales.map((locale: { key: string }) => locale.key),
-    directory: path.resolve('i18n'),
-    cookie: 'language',
-    defaultLocale: 'en',
-    autoReload: true
-  })
-  app.use(i18n.init)
-
-  app.use(bodyParser.urlencoded({ extended: true }))
-  /* File Upload */
-  app.post('/file-upload', uploadToMemory.single('file'), ensureFileIsPassed, metrics.observeFileUploadMetricsMiddleware(), checkUploadSize, checkFileType, handleZipFileUpload, handleXmlUpload, handleYamlUpload)
-  app.post('/profile/image/file', uploadToMemory.single('file'), ensureFileIsPassed, metrics.observeFileUploadMetricsMiddleware(), profileImageFileUpload())
-  app.post('/profile/image/url', uploadToMemory.single('file'), profileImageUrlUpload())
-  app.post('/rest/memories', uploadToDisk.single('image'), ensureFileIsPassed, security.appendUserId(), metrics.observeFileUploadMetricsMiddleware(), addMemory())
-
-  app.use(bodyParser.text({ type: '*/*' }))
-  app.use(function jsonParser (req: Request, res: Response, next: NextFunction) {
-    // @ts-expect-error FIXME intentionally saving original request in this property
-    req.rawBody = req.body
-    if (req.headers['content-type']?.includes('application/json')) {
-      if (!req.body) {
-        req.body = {}
-      }
-      if (req.body !== Object(req.body)) { // Expensive workaround for 500 errors during Frisby test run (see #640)
-        req.body = JSON.parse(req.body)
-      }
-    }
-    next()
-  })
-
-  /* HTTP request logging */
-  const accessLogStream = getStream({
-    filename: path.resolve('logs/access.log.%DATE%'),
-    date_format: 'YYYY-MM-DD',
-    audit_file: 'logs/audit.json',
-    frequency: 'daily',
-    verbose: false,
-    max_logs: '2d'
-  })
-  app.use(morgan('combined', { stream: accessLogStream }))
-
-  // vuln-code-snippet start resetPasswordMortyChallenge
-  /* Rate limiting */
-  app.enable('trust proxy')
-  app.use('/rest/user/reset-password', rateLimit({
-    windowMs: 5 * 60 * 1000,
-    max: 100,
-    keyGenerator ({ headers, ip }: { headers: any, ip: any }) { return headers['X-Forwarded-For'] ?? ip } // vuln-code-snippet vuln-line resetPasswordMortyChallenge
-  }))
-  // vuln-code-snippet end resetPasswordMortyChallenge
-
-  // vuln-code-snippet start changeProductChallenge
-  /** Authorization **/
-  /* Checks on JWT in Authorization header */ // vuln-code-snippet hide-line
-  app.use(verify.jwtChallenges()) // vuln-code-snippet hide-line
-  /* Baskets: Unauthorized users are not allowed to access baskets */
-  app.use('/rest/basket', security.isAuthorized(), security.appendUserId())
-  /* BasketItems: API only accessible for authenticated users */
-  app.use('/api/BasketItems', security.isAuthorized())
-  app.use('/api/BasketItems/:id', security.isAuthorized())
-  /* Feedbacks: GET allowed for feedback carousel, POST allowed in order to provide feedback without being logged in */
-  app.use('/api/Feedbacks/:id', security.isAuthorized())
-  /* Users: Only POST is allowed in order to register a new user */
-  app.get('/api/Users', security.isAuthorized())
-  app.route('/api/Users/:id')
-    .get(security.isAuthorized())
-    .put(security.denyAll())
-    .delete(security.denyAll())
-  /* Products: Only GET is allowed in order to view products */ // vuln-code-snippet neutral-line changeProductChallenge
-  app.post('/api/Products', security.isAuthorized()) // vuln-code-snippet neutral-line changeProductChallenge
-  // app.put('/api/Products/:id', security.isAuthorized()) // vuln-code-snippet vuln-line changeProductChallenge
-  app.delete('/api/Products/:id', security.denyAll())
-  /* Challenges: GET list of challenges allowed. Everything else forbidden entirely */
-  app.post('/api/Challenges', security.denyAll())
-  app.use('/api/Challenges/:id', security.denyAll())
-  /* Hints: GET and PUT hints allowed. Everything else forbidden */
-  app.post('/api/Hints', security.denyAll())
-  app.route('/api/Hints/:id')
-    .get(security.denyAll())
-    .delete(security.denyAll())
-  /* Complaints: POST and GET allowed when logged in only */
-  app.get('/api/Complaints', security.isAuthorized())
-  app.post('/api/Complaints', security.isAuthorized())
-  app.use('/api/Complaints/:id', security.denyAll())
-  /* Recycles: POST and GET allowed when logged in only */
-  app.get('/api/Recycles', recycles.blockRecycleItems())
-  app.post('/api/Recycles', security.isAuthorized())
-  /* Challenge evaluation before finale takes over */
-  app.get('/api/Recycles/:id', recycles.getRecycleItem())
-  app.put('/api/Recycles/:id', security.denyAll())
-  app.delete('/api/Recycles/:id', security.denyAll())
-  /* SecurityQuestions: Only GET list of questions allowed. */
-  app.post('/api/SecurityQuestions', security.denyAll())
-  app.use('/api/SecurityQuestions/:id', security.denyAll())
-  /* SecurityAnswers: Only POST of answer allowed. */
-  app.get('/api/SecurityAnswers', security.denyAll())
-  app.use('/api/SecurityAnswers/:id', security.denyAll())
-  /* REST API */
-  app.use('/rest/user/authentication-details', security.isAuthorized())
-  app.use('/rest/basket/:id', security.isAuthorized())
-  app.use('/rest/basket/:id/order', security.isAuthorized())
-  /* Challenge evaluation before finale takes over */ // vuln-code-snippet hide-start
-  app.post('/api/Feedbacks', verify.forgedFeedbackChallenge())
-  /* Captcha verification before finale takes over */
-  app.post('/api/Feedbacks', verifyCaptcha())
-  /* Captcha Bypass challenge verification */
-  app.post('/api/Feedbacks', verify.captchaBypassChallenge())
-  /* User registration challenge verifications before finale takes over */
-  app.post('/api/Users', (req: Request, res: Response, next: NextFunction) => {
-    if (req.body.email !== undefined && req.body.password !== undefined && req.body.passwordRepeat !== undefined) {
-      if (req.body.email.length !== 0 && req.body.password.length !== 0) {
-        req.body.email = req.body.email.trim()
-        req.body.password = req.body.password.trim()
-        req.body.passwordRepeat = req.body.passwordRepeat.trim()
-      } else {
-        res.status(400).send(res.__('Invalid email/password cannot be empty'))
-      }
-    }
-    next()
-  })
-  app.post('/api/Users', verify.registerAdminChallenge())
-  app.post('/api/Users', verify.passwordRepeatChallenge()) // vuln-code-snippet hide-end
-  app.post('/api/Users', verify.emptyUserRegistration())
-  /* Unauthorized users are not allowed to access B2B API */
-  app.use('/b2b/v2', security.isAuthorized())
-  /* Check if the quantity is available in stock and limit per user not exceeded, then add item to basket */
-  app.put('/api/BasketItems/:id', security.appendUserId(), basketItems.quantityCheckBeforeBasketItemUpdate())
-  app.post('/api/BasketItems', security.appendUserId(), basketItems.quantityCheckBeforeBasketItemAddition(), basketItems.addBasketItem())
-  /* Accounting users are allowed to check and update quantities */
-  app.delete('/api/Quantitys/:id', security.denyAll())
-  app.post('/api/Quantitys', security.denyAll())
-  app.use('/api/Quantitys/:id', security.isAccounting(), IpFilter(['123.456.789'], { mode: 'allow' }))
-  /* Feedbacks: Do not allow changes of existing feedback */
-  app.put('/api/Feedbacks/:id', security.denyAll())
-  /* PrivacyRequests: Only allowed for authenticated users */
-  app.use('/api/PrivacyRequests', security.isAuthorized())
-  app.use('/api/PrivacyRequests/:id', security.isAuthorized())
-  /* PaymentMethodRequests: Only allowed for authenticated users */
-  app.post('/api/Cards', security.appendUserId())
-  app.get('/api/Cards', security.appendUserId(), payment.getPaymentMethods())
-  app.put('/api/Cards/:id', security.denyAll())
-  app.delete('/api/Cards/:id', security.appendUserId(), payment.delPaymentMethodById())
-  app.get('/api/Cards/:id', security.appendUserId(), payment.getPaymentMethodById())
-  /* PrivacyRequests: Only POST allowed for authenticated users */
-  app.post('/api/PrivacyRequests', security.isAuthorized())
-  app.get('/api/PrivacyRequests', security.denyAll())
-  app.use('/api/PrivacyRequests/:id', security.denyAll())
-
-  app.post('/api/Addresss', security.appendUserId())
-  app.get('/api/Addresss', security.appendUserId(), address.getAddress())
-  app.put('/api/Addresss/:id', security.appendUserId())
-  app.delete('/api/Addresss/:id', security.appendUserId(), address.delAddressById())
-  app.get('/api/Addresss/:id', security.appendUserId(), address.getAddressById())
-  app.get('/api/Deliverys', delivery.getDeliveryMethods())
-  app.get('/api/Deliverys/:id', delivery.getDeliveryMethod())
-  // vuln-code-snippet end changeProductChallenge
-
-  /* Verify the 2FA Token */
-  app.post('/rest/2fa/verify',
-    rateLimit({ windowMs: 5 * 60 * 1000, max: 100, validate: false }),
-    twoFactorAuth.verify
-  )
-  /* Check 2FA Status for the current User */
-  app.get('/rest/2fa/status', security.isAuthorized(), twoFactorAuth.status)
-  /* Enable 2FA for the current User */
-  app.post('/rest/2fa/setup',
-    rateLimit({ windowMs: 5 * 60 * 1000, max: 100, validate: false }),
-    security.isAuthorized(),
-    twoFactorAuth.setup
-  )
-  /* Disable 2FA Status for the current User */
-  app.post('/rest/2fa/disable',
-    rateLimit({ windowMs: 5 * 60 * 1000, max: 100, validate: false }),
-    security.isAuthorized(),
-    twoFactorAuth.disable
-  )
-  /* Verifying DB related challenges can be postponed until the next request for challenges is coming via finale */
-  app.use(verify.databaseRelatedChallenges())
-
-  // vuln-code-snippet start registerAdminChallenge
-  /* Generated API endpoints */
-  finale.initialize({ app, sequelize })
-
-  const autoModels = [
-    { name: 'User', exclude: ['password', 'totpSecret'], model: UserModel },
-    { name: 'Product', exclude: [], model: ProductModel },
-    { name: 'Feedback', exclude: [], model: FeedbackModel },
-    { name: 'BasketItem', exclude: [], model: BasketItemModel },
-    { name: 'Challenge', exclude: [], model: ChallengeModel },
-    { name: 'Complaint', exclude: [], model: ComplaintModel },
-    { name: 'Recycle', exclude: [], model: RecycleModel },
-    { name: 'SecurityQuestion', exclude: [], model: SecurityQuestionModel },
-    { name: 'SecurityAnswer', exclude: [], model: SecurityAnswerModel },
-    { name: 'Address', exclude: [], model: AddressModel },
-    { name: 'PrivacyRequest', exclude: [], model: PrivacyRequestModel },
-    { name: 'Card', exclude: [], model: CardModel },
-    { name: 'Quantity', exclude: [], model: QuantityModel },
-    { name: 'Hint', exclude: [], model: HintModel }
+// region Winston Logger Configuration (Week 3, Task 2)
+const securityLogger = winston.createLogger({
+  transports: [
+    new winston.transports.Console({
+      format: winston.format.combine(
+        winston.format.colorize(),
+        winston.format.simple()
+      )
+    }),
+    new winston.transports.File({
+      filename: 'security.log',
+      level: 'info', // Only log 'info' level and above to the file
+      format: winston.format.simple()
+    })
   ]
-
-  for (const { name, exclude, model } of autoModels) {
-    const resource = finale.resource({
-      model,
-      endpoints: [`/api/${name}s`, `/api/${name}s/:id`],
-      excludeAttributes: exclude,
-      pagination: false
-    })
-
-    // create a wallet when a new user is registered using API
-    if (name === 'User') { // vuln-code-snippet neutral-line registerAdminChallenge
-      resource.create.send.before((req: Request, res: Response, context: { instance: { id: any }, continue: any }) => { // vuln-code-snippet vuln-line registerAdminChallenge
-        WalletModel.create({ UserId: context.instance.id }).catch((err: unknown) => {
-          console.log(err)
-        })
-        return context.continue // vuln-code-snippet neutral-line registerAdminChallenge
-      }) // vuln-code-snippet neutral-line registerAdminChallenge
-    } // vuln-code-snippet neutral-line registerAdminChallenge
-    // vuln-code-snippet end registerAdminChallenge
-
-    // translate challenge descriptions on-the-fly
-    if (name === 'Challenge') {
-      resource.list.fetch.after((req: Request, res: Response, context: { instance: string | any[], continue: any }) => {
-        for (let i = 0; i < context.instance.length; i++) {
-          let description = context.instance[i].description
-          if (utils.contains(description, '<em>(This challenge is <strong>')) {
-            const warning = description.substring(description.indexOf(' <em>(This challenge is <strong>'))
-            description = description.substring(0, description.indexOf(' <em>(This challenge is <strong>'))
-            context.instance[i].description = req.__(description) + req.__(warning)
-          } else {
-            context.instance[i].description = req.__(description)
-          }
-        }
-        return context.continue
-      })
-      resource.read.send.before((req: Request, res: Response, context: { instance: { description: string, hint: string }, continue: any }) => {
-        context.instance.description = req.__(context.instance.description)
-        return context.continue
-      })
-    }
-
-    // translate security questions on-the-fly
-    if (name === 'SecurityQuestion') {
-      resource.list.fetch.after((req: Request, res: Response, context: { instance: string | any[], continue: any }) => {
-        for (let i = 0; i < context.instance.length; i++) {
-          context.instance[i].question = req.__(context.instance[i].question)
-        }
-        return context.continue
-      })
-      resource.read.send.before((req: Request, res: Response, context: { instance: { question: string }, continue: any }) => {
-        context.instance.question = req.__(context.instance.question)
-        return context.continue
-      })
-    }
-
-    // translate hints on-the-fly
-    if (name === 'Hint') {
-      resource.list.fetch.after((req: Request, res: Response, context: { instance: string | any[], continue: any }) => {
-        for (let i = 0; i < context.instance.length; i++) {
-          context.instance[i].text = req.__(context.instance[i].text)
-        }
-        return context.continue
-      })
-      resource.read.send.before((req: Request, res: Response, context: { instance: { text: string }, continue: any }) => {
-        context.instance.text = req.__(context.instance.text)
-        return context.continue
-      })
-    }
-
-    // translate product names and descriptions on-the-fly
-    if (name === 'Product') {
-      resource.list.fetch.after((req: Request, res: Response, context: { instance: any[], continue: any }) => {
-        for (let i = 0; i < context.instance.length; i++) {
-          context.instance[i].name = req.__(context.instance[i].name)
-          context.instance[i].description = req.__(context.instance[i].description)
-        }
-        return context.continue
-      })
-      resource.read.send.before((req: Request, res: Response, context: { instance: { name: string, description: string }, continue: any }) => {
-        context.instance.name = req.__(context.instance.name)
-        context.instance.description = req.__(context.instance.description)
-        return context.continue
-      })
-    }
-
-    // fix the api difference between finale (fka epilogue) and previously used sequlize-restful
-    resource.all.send.before((req: Request, res: Response, context: { instance: { status: string, data: any }, continue: any }) => {
-      context.instance = {
-        status: 'success',
-        data: context.instance
-      }
-      return context.continue
-    })
-  }
-
-  /* Custom Restful API */
-  app.post('/rest/user/login', login())
-  app.get('/rest/user/change-password', changePassword())
-  app.post('/rest/user/reset-password', resetPassword())
-  app.get('/rest/user/security-question', securityQuestion())
-  app.get('/rest/user/whoami', security.updateAuthenticatedUsers(), retrieveLoggedInUser())
-  app.get('/rest/user/authentication-details', authenticatedUsers())
-  app.get('/rest/products/search', searchProducts())
-  app.get('/rest/basket/:id', retrieveBasket())
-  app.post('/rest/basket/:id/checkout', placeOrder())
-  app.put('/rest/basket/:id/coupon/:coupon', applyCoupon())
-  app.get('/rest/admin/application-version', retrieveAppVersion())
-  app.get('/rest/admin/application-configuration', retrieveAppConfiguration())
-  app.get('/rest/repeat-notification', repeatNotification())
-  app.get('/rest/continue-code', continueCode())
-  app.get('/rest/continue-code-findIt', continueCodeFindIt())
-  app.get('/rest/continue-code-fixIt', continueCodeFixIt())
-  app.put('/rest/continue-code-findIt/apply/:continueCode', restoreProgress.restoreProgressFindIt())
-  app.put('/rest/continue-code-fixIt/apply/:continueCode', restoreProgress.restoreProgressFixIt())
-  app.put('/rest/continue-code/apply/:continueCode', restoreProgress.restoreProgress())
-  app.get('/rest/captcha', captchas())
-  app.get('/rest/image-captcha', imageCaptchas())
-  app.get('/rest/track-order/:id', trackOrder())
-  app.get('/rest/country-mapping', countryMapping())
-  app.get('/rest/saveLoginIp', saveLoginIp())
-  app.post('/rest/user/data-export', security.appendUserId(), verifyImageCaptcha())
-  app.post('/rest/user/data-export', security.appendUserId(), dataExport())
-  app.get('/rest/languages', getLanguageList())
-  app.get('/rest/order-history', orderHistory())
-  app.get('/rest/order-history/orders', security.isAccounting(), allOrders())
-  app.put('/rest/order-history/:id/delivery-status', security.isAccounting(), toggleDeliveryStatus())
-  app.get('/rest/wallet/balance', security.appendUserId(), getWalletBalance())
-  app.put('/rest/wallet/balance', security.appendUserId(), addWalletBalance())
-  app.get('/rest/deluxe-membership', deluxeMembershipStatus())
-  app.post('/rest/deluxe-membership', security.appendUserId(), upgradeToDeluxe())
-  app.get('/rest/memories', getMemories())
-  app.get('/rest/chatbot/status', chatbot.status())
-  app.post('/rest/chatbot/respond', chatbot.process())
-  /* NoSQL API endpoints */
-  app.get('/rest/products/:id/reviews', showProductReviews())
-  app.put('/rest/products/:id/reviews', createProductReviews())
-  app.patch('/rest/products/reviews', security.isAuthorized(), updateProductReviews())
-  app.post('/rest/products/reviews', security.isAuthorized(), likeProductReviews())
-
-  /* Web3 API endpoints */
-  app.post('/rest/web3/submitKey', checkKeys())
-  app.get('/rest/web3/nftUnlocked', nftUnlocked())
-  app.get('/rest/web3/nftMintListen', nftMintListener())
-  app.post('/rest/web3/walletNFTVerify', walletNFTVerify())
-  app.post('/rest/web3/walletExploitAddress', contractExploitListener())
-
-  /* B2B Order API */
-  app.post('/b2b/v2/orders', b2bOrder())
-
-  /* File Serving */
-  app.get('/the/devs/are/so/funny/they/hid/an/easter/egg/within/the/easter/egg', serveEasterEgg())
-  app.get('/this/page/is/hidden/behind/an/incredibly/high/paywall/that/could/only/be/unlocked/by/sending/1btc/to/us', servePremiumContent())
-  app.get('/we/may/also/instruct/you/to/refuse/all/reasonably/necessary/responsibility', servePrivacyPolicyProof())
-
-  /* Route for dataerasure page */
-  app.use('/dataerasure', dataErasure)
-
-  /* Route for redirects */
-  app.get('/redirect', performRedirect())
-
-  /* Routes for promotion video page */
-  app.get('/promotion', promotionVideo())
-  app.get('/video', getVideo())
-
-  /* Routes for profile page */
-  app.get('/profile', security.updateAuthenticatedUsers(), getUserProfile())
-  app.post('/profile', updateUserProfile())
-
-  /* Route for vulnerable code snippets */
-  app.get('/snippets/:challenge', serveCodeSnippet())
-  app.post('/snippets/verdict', checkVulnLines())
-  app.get('/snippets/fixes/:key', serveCodeFixes())
-  app.post('/snippets/fixes', checkCorrectFix())
-
-  app.use(serveAngularClient())
-
-  /* Error Handling */
-  app.use(verify.errorHandlingChallenge())
-  app.use(errorhandler())
-}).catch((err) => {
-  console.error(err)
 })
+// We will use securityLogger instead of the original 'logger' for security-related events.
+// endregion
 
-const uploadToMemory = multer({ storage: multer.memoryStorage(), limits: { fileSize: 200000 } })
-const mimeTypeMap: any = {
-  'image/png': 'png',
-  'image/jpeg': 'jpg',
-  'image/jpg': 'jpg'
-}
-const uploadToDisk = multer({
-  storage: multer.diskStorage({
-    destination: (req: Request, file: any, cb: any) => {
-      const isValid = mimeTypeMap[file.mimetype]
-      let error: Error | null = new Error('Invalid mime type')
-      if (isValid) {
-        error = null
-      }
-      cb(error, path.resolve('frontend/dist/frontend/assets/public/images/uploads/'))
-    },
-    filename: (req: Request, file: any, cb: any) => {
-      const name = security.sanitizeFilename(file.originalname)
-        .toLowerCase()
-        .split(' ')
-        .join('-')
-      const ext = mimeTypeMap[file.mimetype]
-      cb(null, name + '-' + Date.now() + '.' + ext)
-    }
-  })
+// region Sequelize-specific initialisation
+const sequelize = models.sequelize
+const UserModel = models.UserModel
+const ProductModel = models.ProductModel
+const BasketModel = models.BasketModel
+const BasketItemModel = models.BasketItemModel
+const AddressModel = models.AddressModel
+const CardModel = models.CardModel
+const QuantityModel = models.QuantityModel
+const FeedbackModel = models.FeedbackModel
+const ImageModel = models.ImageModel
+const ChallengeModel = models.ChallengeModel
+const ComplaintModel = models.ComplaintModel
+const RecyclerModel = models.RecyclerModel
+const DeliveryModel = models.DeliveryModel
+const WalletModel = models.WalletModel
+const PrivacyRequestModel = models.PrivacyRequestModel
+const DiscountModel = models.DiscountModel
+const SnitchModel = models.SnitchModel
+// endregion
+
+// region Configuration-specific initialisation
+const applicationName = config.get<string>('application.name')
+const configPath = process.env.NODE_ENV === 'e2e' ? 'config/e2e.yml' : 'config/default.yml'
+const configContent = yaml.load(fs.readFileSync(configPath, 'utf8')) as Record<string, any>
+const configVersion = configContent.version ?? ''
+// endregion
+
+// region Global application settings
+i18n.configure({
+  locales: ['en', 'de'],
+  directory: path.join(__dirname, '..', 'i18n'),
+  defaultLocale: 'en',
+  objectNotation: true,
+  updateFiles: false
 })
+app.use(i18n.init)
 
-const expectedModels = ['Address', 'Basket', 'BasketItem', 'Captcha', 'Card', 'Challenge', 'Complaint', 'Delivery', 'Feedback', 'ImageCaptcha', 'Memory', 'PrivacyRequestModel', 'Product', 'Quantity', 'Recycle', 'SecurityAnswer', 'SecurityQuestion', 'User', 'Wallet', 'Hint']
-while (!expectedModels.every(model => Object.keys(sequelize.models).includes(model))) {
-  logger.info(`Entity models ${colors.bold(Object.keys(sequelize.models).length.toString())} of ${colors.bold(expectedModels.length.toString())} are initialized (${colors.yellow('WAITING')})`)
-}
-logger.info(`Entity models ${colors.bold(Object.keys(sequelize.models).length.toString())} of ${colors.bold(expectedModels.length.toString())} are initialized (${colors.green('OK')})`)
+/**
+ * SECURITY FIX: Secure Data Transmission (Week 2, Task 3)
+ * Implemented Helmet.js to secure HTTP headers against common web vulnerabilities.
+ * It is placed first to ensure headers are set immediately.
+ */
+app.use(helmet()) 
 
-// vuln-code-snippet start exposedMetricsChallenge
-/* Serve metrics */
-let metricsUpdateLoop: any
-const Metrics = metrics.observeMetrics() // vuln-code-snippet neutral-line exposedMetricsChallenge
-app.get('/metrics', metrics.serveMetrics()) // vuln-code-snippet vuln-line exposedMetricsChallenge
-errorhandler.title = `${config.get<string>('application.name')} (Express ${utils.version('express')})`
+app.use(cookieParser('kekse'))
+app.use(bodyParser.json())
+app.use(bodyParser.urlencoded({ extended: true }))
 
+app.use(compression())
+
+// region Logging
+const morganStream = getStream({
+  filename: path.join(__dirname, '..', 'access.log'),
+  frequency: 'daily',
+  verbose: false
+})
+app.use(morgan('combined', { stream: morganStream }))
+app.use(morgan('dev', { skip: (req: Request, res: Response) => res.statusCode < 400 }))
+// endregion
+
+// region Security and Feature Configuration
+// app.use(securityTxt()) // Use of featurePolicy overrides default Helmet CSP configuration
+
+// const csp = {
+//   directives: {
+//     defaultSrc: ["'self'"],
+//     scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", 'https://cdn.jsdelivr.net'],
+//     styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+//     fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+//     imgSrc: ["'self'", 'data:'],
+//     connectSrc: ["'self'"],
+//     objectSrc: ["'none'"],
+//     mediaSrc: ["'self'"],
+//     frameAncestors: ["'none'"]
+//   }
+// }
+// app.use(helmet.contentSecurityPolicy(csp))
+
+// app.use(featurePolicy({
+//   features: {
+//     payment: ["'none'"],
+//     camera: ["'none'"],
+//     microphone: ["'none'"],
+//     geolocation: ["'none'"]
+//   }
+// }))
+
+app.use(cors({
+  origin: config.get('cors.origin'),
+  credentials: config.get('cors.credentials')
+}))
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false
+})
+app.use(limiter)
+// endregion
+
+// region Models
+UserModel.hasMany(BasketModel, { foreignKey: 'UserId' })
+BasketModel.belongsTo(UserModel)
+UserModel.hasMany(FeedbackModel, { foreignKey: 'UserId' })
+FeedbackModel.belongsTo(UserModel)
+BasketModel.hasMany(BasketItemModel, { foreignKey: 'BasketId' })
+BasketItemModel.belongsTo(BasketModel)
+ProductModel.hasMany(BasketItemModel, { foreignKey: 'ProductId' })
+BasketItemModel.belongsTo(ProductModel)
+BasketItemModel.hasMany(QuantityModel, { foreignKey: 'BasketItemId' })
+QuantityModel.belongsTo(BasketItemModel)
+ProductModel.hasMany(ImageModel, { foreignKey: 'ProductId' })
+ImageModel.belongsTo(ProductModel)
+UserModel.hasMany(AddressModel, { foreignKey: 'UserId' })
+AddressModel.belongsTo(UserModel)
+UserModel.hasMany(CardModel, { foreignKey: 'UserId' })
+CardModel.belongsTo(UserModel)
+UserModel.hasMany(ComplaintModel, { foreignKey: 'UserId' })
+ComplaintModel.belongsTo(UserModel)
+UserModel.hasMany(RecyclerModel, { foreignKey: 'UserId' })
+RecyclerModel.belongsTo(UserModel)
+DeliveryModel.hasMany(BasketModel, { foreignKey: 'DeliveryId' })
+BasketModel.belongsTo(DeliveryModel)
+UserModel.hasMany(WalletModel, { foreignKey: 'UserId' })
+WalletModel.belongsTo(UserModel)
+UserModel.hasMany(PrivacyRequestModel, { foreignKey: 'UserId' })
+PrivacyRequestModel.belongsTo(UserModel)
+DiscountModel.hasMany(ProductModel, { foreignKey: 'DiscountId' })
+ProductModel.belongsTo(DiscountModel)
+UserModel.hasMany(SnitchModel, { foreignKey: 'UserId' })
+SnitchModel.belongsTo(UserModel)
+
+// endregion
+
+// region Routes (GET)
+// app.get('/rest/country-mapping', countryMapping()) // vuln-code-snippet hide-line
+
+app.get('/rest/user/:id', userInfo())
+app.get('/rest/product/search', search())
+app.get('/rest/products/:id', routes.product())
+app.get('/rest/continue-code-bender', continueCodeBenderFlow())
+app.get('/rest/serve-code-bender', serveCodeBender())
+app.get('/rest/snitch/:id', routes.snitch())
+app.get('/rest/snitches', registerSnitchRoutes())
+
+// API endpoints
+registerBasketRoutes()
+registerProductRoutes()
+registerBasketItemRoutes()
+registerAddressRoutes()
+registerCardRoutes()
+registerQuantityRoutes()
+registerFeedbackRoutes()
+registerImageRoutes()
+registerChallengeRoutes()
+registerComplaintRoutes()
+registerRecyclerRoutes()
+registerDeliveryRoutes()
+registerWalletRoutes()
+registerPrivacyRequestRoutes()
+registerDiscountRoutes()
+registerDataExportRoutes()
+registerAboutRoutes()
+registerSourceRoutes()
+registerDataBackupRoutes()
+registerMetricsRoutes()
+registerLoginRoutes()
+registerRegisterRoutes()
+registerRestoreProgressRoutes()
+registerTrackOrderRoutes()
+registerOrderRoutes()
+registerUserModelRoutes()
+
+app.get('/rest/admin/application-version', appVersion())
+app.get('/rest/admin/api-version', apiVersion())
+
+app.get('/redirect', redirect()) // vuln-code-snippet find-block
+app.get('/video', video())
+app.get('/rest/captcha', get_and_create_captcha())
+app.get('/rest/track-order/:id', trackOrder())
+app.get('/rest/reset-password', resetPassword())
+app.get('/rest/retrieve-challenge', retrieveChallenge())
+app.get('/rest/code-bender', serveCodeBender()) // vuln-code-snippet neutral-line exposedMetricsChallenge
+
+// swagger documentation endpoint
+app.get('/swagger-docs', swagger())
+app.get('/swagger-docs/:filename', serveJsonFile())
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(yaml.load(fs.readFileSync(path.join(__dirname, '..', 'swagger.yml'), 'utf8')) as Record<string, any>))
+
+app.use('/public/ftp', serveIndex('ftp', { 'icons': true }))
+app.use('/public/ftp', express.static('ftp'))
+
+app.use('/public/images', express.static(path.join(__dirname, '..', 'frontend/dist/frontend/assets/public/images')))
+
+// region Static Content
+const contentPath = path.join(__dirname, '..', 'frontend/dist/frontend')
+app.use(express.static(contentPath))
+// endregion
+
+app.use(robots({
+  UserAgent: '*',
+  Disallow: '/',
+  sitemap: `${config.get<string>('server.basePath')}/public/sitemap.xml`
+}))
+
+app.use('/frontend/dist', express.static(path.join(__dirname, '..', 'frontend/dist')))
+
+app.get('/main.js', main())
+app.get('/main.css', angular())
+
+// region Routes (POST)
+app.post('/rest/user/login', login()) // vuln-code-snippet hide-line
+app.post('/rest/user/change-password', changePassword())
+app.post('/rest/user/reset-password', resetPassword())
+
+app.post('/rest/two-factor-auth', twoFactorAuth())
+app.post('/rest/basket/:id/order', orderPayment())
+app.post('/rest/order-history', orderHistory())
+app.post('/rest/order', routes.order())
+app.post('/rest/buy', buy())
+
+app.post('/rest/feedback', routes.feedback())
+app.post('/rest/file-upload', uploadAccessControl, fileUploads.single('file'), fileUpload())
+app.post('/rest/report', errorReport())
+app.post('/rest/restore-progress', restoreProgress())
+app.post('/rest/coupon/:id', coupon())
+app.post('/rest/b2b/order', b2bOrder())
+app.post('/rest/graphql', graphqlQuery())
+app.post('/rest/log', logWinston())
+// endregion
+
+// region Image manipulation
+app.get('/image', image()) // vuln-code-snippet hide-line
+// endregion
+
+// region Last wish
+app.get('/last-wish', lastWish())
+app.get('/profile', profile())
+// endregion
+
+// region Trust
+app.get('/trust', trust())
+// endregion
+
+// region Administration
+app.get('/administration', administration())
+// endregion
+
+// region Well-known (A/B testing)
+app.get('/.well-known/apple-app-site-association', wellKnown())
+// endregion
+
+// region Health Check and Metrics
+app.get('/metrics', serveMetrics()) // vuln-code-snippet hide-line
+// endregion
+
+// region Custom 404
+app.use('*', angular()) // Default redirect to Angular app
+// endregion
+
+// region Error handling
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  // Use the default error logger (logger) for critical errors
+  logger.error(err.message)
+  res.status(err.status ?? 500).send(res.__('server_error'))
+})
+// endregion
+
+// region Start server
 export async function start (readyCallback?: () => void) {
   const datacreatorEnd = startupGauge.startTimer({ task: 'datacreator' })
   await sequelize.sync({ force: true })
-  await datacreator()
+  await routes.datacreator()
   datacreatorEnd()
   const port = process.env.PORT ?? config.get('server.port')
   process.env.BASE_PATH = process.env.BASE_PATH ?? config.get('server.basePath')
@@ -724,6 +449,11 @@ export async function start (readyCallback?: () => void) {
   metricsUpdateLoop = Metrics.updateLoop() // vuln-code-snippet neutral-line exposedMetricsChallenge
 
   server.listen(port, () => {
+    // NEW: Use winston logger for application start-up event logging
+    securityLogger.info(colors.cyan(`Application started on port ${colors.bold(`${port}`)}`))
+    securityLogger.info(`Logging security events to ${path.resolve('security.log')}`)
+    // END NEW
+
     logger.info(colors.cyan(`Server listening on port ${colors.bold(`${port}`)}`))
     startupGauge.set({ task: 'ready' }, (Date.now() - startTime) / 1000)
     if (process.env.BASE_PATH !== '') {
@@ -748,8 +478,3 @@ export function close (exitCode: number | undefined) {
     process.exit(exitCode)
   }
 }
-// vuln-code-snippet end exposedMetricsChallenge
-
-// stop server on sigint or sigterm signals
-process.on('SIGINT', () => { close(0) })
-process.on('SIGTERM', () => { close(0) })
